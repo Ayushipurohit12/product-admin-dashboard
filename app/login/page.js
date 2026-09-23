@@ -1,9 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import Loader from "@/components/Loader";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState("emilys");
+  const [password, setPassword] = useState("emilyspass");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { user, loading, login } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) router.replace("/products");
+  }, [loading, router, user]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await login(username.trim(), password);
+      router.replace("/products");
+    } catch (requestError) {
+      setError(requestError.message || "We could not sign you in. Check your details.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading || user) {
+    return <div className="flex min-h-screen items-center justify-center"><Loader label="Checking session" /></div>;
+  }
 
   return (
     <main className="min-h-screen bg-[#F7F5F0] px-4 py-8 text-[#1C2321] sm:px-6 lg:px-8">
@@ -66,15 +97,18 @@ export default function LoginPage() {
               <h3 className="text-3xl font-semibold text-[#1C2321]">Sign in to your account</h3>
             </div>
 
-            <form className="space-y-5">
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium text-[#33403C]">
-                  Email address
+                  <label htmlFor="username" className="text-sm font-medium text-[#33403C]">
+                  Username
                 </label>
                 <input
-                  id="email"
-                  type="email"
-                  defaultValue="admin@stockroom.io"
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  required
                   className="w-full rounded-2xl border border-[#D8D1C4] bg-white px-4 py-3.5 text-base text-[#1C2321] shadow-sm transition focus:border-[#2F5D50] focus:outline-none focus:ring-4 focus:ring-[#B9D5C9]"
                 />
               </div>
@@ -96,7 +130,10 @@ export default function LoginPage() {
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    defaultValue="password123"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
                     className="w-full rounded-2xl border border-[#D8D1C4] bg-white px-4 py-3.5 pr-12 text-base text-[#1C2321] shadow-sm transition focus:border-[#2F5D50] focus:outline-none focus:ring-4 focus:ring-[#B9D5C9]"
                   />
                   <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[#5A6D66]">
@@ -108,25 +145,23 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-4 text-sm text-[#4E5E59]">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    className="h-4 w-4 rounded border-[#C8C1B3] bg-white text-[#2F5D50] focus:ring-[#2F5D50]"
-                  />
-                  Remember me
-                </label>
-                <button type="button" className="font-medium text-[#2F5D50] hover:text-[#244B40]">
-                  Forgot password?
-                </button>
+              {error ? (
+                <div role="alert" className="rounded-2xl border border-[#E7B7AC] bg-[#FFF1EE] px-4 py-3 text-sm text-[#9A3D2D]">
+                  {error}
+                </div>
+              ) : null}
+
+              <div className="flex items-center gap-2 text-sm text-[#4E5E59]">
+                <input id="remember" type="checkbox" defaultChecked className="h-4 w-4 rounded border-[#C8C1B3] bg-white text-[#2F5D50] focus:ring-[#2F5D50]" />
+                <label htmlFor="remember">Remember me</label>
               </div>
 
               <button
                 type="submit"
+                disabled={submitting}
                 className="w-full rounded-2xl bg-[#1C2321] px-4 py-3.5 text-base font-semibold text-white shadow-[0_14px_30px_rgba(28,35,33,0.18)] transition hover:-translate-y-0.5 hover:bg-[#2A3533]"
               >
-                Sign in
+                {submitting ? "Signing in..." : "Sign in"}
               </button>
             </form>
 
