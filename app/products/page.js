@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import ProtectedShell from "@/components/ProtectedShell";
 import Loader from "@/components/Loader";
 import api from "@/lib/axios";
@@ -12,26 +13,47 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [sortBy, setSortBy] = useState("");
+  const [order, setOrder] = useState("asc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    api.get("/products/categories")
+      .then(({ data }) => setCategories(data.map((item) => typeof item === "string" ? { slug: item, name: item } : item)))
+      .catch(() => setCategories([]));
+  }, []);
 
   useEffect(() => {
     let active = true;
     const query = search.trim();
     const timer = setTimeout(() => {
-      const path = query ? "/products/search" : "/products";
+      const path = query
+        ? "/products/search"
+        : category
+          ? `/products/category/${encodeURIComponent(category)}`
+          : "/products";
 
       api.get(path, {
         params: {
           limit: pageSize,
           skip: (page - 1) * pageSize,
           ...(query ? { q: query } : {}),
+          ...(sortBy ? { sortBy, order } : {}),
         },
       })
         .then(({ data }) => {
           if (!active) return;
-          setProducts(data.products || []);
-          setTotal(data.total || data.products?.length || 0);
+          const localProducts = getLocalProducts().filter((product) => matchesProduct(product, query, category));
+          const sortedLocalProducts = sortProducts(localProducts, sortBy, order);
+          const pageProducts = page === 1
+            ? [...sortedLocalProducts, ...(data.products || [])].slice(0, pageSize)
+            : data.products || [];
+          setProducts(pageProducts);
+          setTotal((data.total || data.products?.length || 0) + sortedLocalProducts.length);
           setError("");
         })
         .catch((requestError) => {
@@ -46,7 +68,7 @@ export default function ProductsPage() {
       active = false;
       clearTimeout(timer);
     };
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, category, sortBy, order, retryKey]);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -61,6 +83,26 @@ export default function ProductsPage() {
     setPageSize(Number(event.target.value));
     setPage(1);
     setLoading(true);
+  }
+
+  function changeCategory(event) {
+    setCategory(event.target.value);
+    setPage(1);
+    setLoading(true);
+  }
+
+  function changeSort(event) {
+    const [nextSortBy, nextOrder] = event.target.value.split(":");
+    setSortBy(nextSortBy);
+    setOrder(nextOrder || "asc");
+    setPage(1);
+    setLoading(true);
+  }
+
+  function retryRequest() {
+    setError("");
+    setLoading(true);
+    setRetryKey((current) => current + 1);
   }
 
   return (
@@ -92,9 +134,28 @@ export default function ProductsPage() {
             </div>
           </div>
 
+          <div className="mb-5 flex flex-wrap gap-3">
+            <label htmlFor="category-filter" className="sr-only">Filter by category</label>
+            <select id="category-filter" value={category} onChange={changeCategory} className="rounded-xl border border-[#333333] bg-[#101010] px-3 py-2.5 text-sm capitalize text-white outline-none focus:border-[#777777]">
+              <option value="">All categories</option>
+              {categories.map((item) => <option key={item.slug} value={item.slug}>{item.name || item.slug}</option>)}
+            </select>
+            <label htmlFor="sort-products" className="sr-only">Sort products</label>
+            <select id="sort-products" value={sortBy ? `${sortBy}:${order}` : ""} onChange={changeSort} className="rounded-xl border border-[#333333] bg-[#101010] px-3 py-2.5 text-sm text-white outline-none focus:border-[#777777]">
+              <option value="">Sort products</option>
+              <option value="price:asc">Price: low to high</option>
+              <option value="price:desc">Price: high to low</option>
+              <option value="rating:desc">Rating: highest first</option>
+              <option value="rating:asc">Rating: lowest first</option>
+              <option value="title:asc">Title: A to Z</option>
+              <option value="title:desc">Title: Z to A</option>
+            </select>
+          </div>
+
           {loading ? <div className="flex min-h-64 items-center justify-center rounded-2xl border border-[#292929] bg-[#101010]"><Loader label="Loading products" /></div> : null}
-          {error ? <div role="alert" className="rounded-2xl border border-[#6F3838] bg-[#241313] px-4 py-3 text-sm text-[#F0A9A0]">{error}</div> : null}
-          {!loading && !error ? <div className="hidden overflow-hidden rounded-2xl border border-[#292929] bg-[#101010] md:block">
+          {error ? <div role="alert" className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-[#6F3838] bg-[#241313] px-4 py-10 text-center"><p className="text-sm text-[#F0A9A0]">{error}</p><button type="button" onClick={retryRequest} className="rounded-xl border border-[#D98A7C] px-4 py-2 text-sm font-semibold text-[#FFD3CC] transition hover:bg-[#51231F]">Retry</button></div> : null}
+          {!loading && !error && products.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[#292929] bg-[#101010] px-4 text-center"><p className="text-lg font-semibold text-white">No products found</p><p className="mt-2 text-sm text-[#888888]">Try a different search or filter.</p></div> : null}
+          {!loading && !error && products.length > 0 ? <div className="hidden overflow-hidden rounded-2xl border border-[#292929] bg-[#101010] md:block">
             <table className="w-full text-left">
               <thead className="border-b border-[#292929] text-xs uppercase tracking-[0.14em] text-[#777777]">
                 <tr>
@@ -103,6 +164,7 @@ export default function ProductsPage() {
                   <th className="px-5 py-4 font-medium">Price</th>
                   <th className="px-5 py-4 font-medium">Rating</th>
                   <th className="px-5 py-4 font-medium">Stock</th>
+                  <th className="px-5 py-4 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#292929]">
@@ -111,7 +173,7 @@ export default function ProductsPage() {
             </table>
           </div> : null}
 
-          {!loading && !error ? <div className="grid gap-3 md:hidden">
+          {!loading && !error && products.length > 0 ? <div className="grid gap-3 md:hidden">
             {products.map((product) => <ProductCard key={product.id} product={product} />)}
           </div> : null}
 
@@ -136,11 +198,16 @@ export default function ProductsPage() {
 }
 
 function ProductRow({ product }) {
-  return <tr className="transition hover:bg-[#161616]"><td className="px-5 py-4"><div className="flex items-center gap-3"><img src={product.thumbnail} alt="" className="h-11 w-11 rounded-xl object-cover" /><span className="font-medium text-[#F2F2F2]">{product.title}</span></div></td><td className="px-5 py-4 text-sm capitalize text-[#999999]">{product.category}</td><td className="px-5 py-4 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</td><td className="px-5 py-4 text-sm text-[#D7B86A]">★ {product.rating}</td><td className="px-5 py-4"><Stock stock={product.stock} /></td></tr>;
+  return <tr className="transition hover:bg-[#161616]"><td className="px-5 py-4"><Link href={`/products/${product.id}`} className="flex items-center gap-3"><ProductImage src={product.thumbnail} size="small" /><span className="font-medium text-[#F2F2F2] hover:text-white">{product.title}</span></Link></td><td className="px-5 py-4 text-sm capitalize text-[#999999]">{product.category}</td><td className="px-5 py-4 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</td><td className="px-5 py-4 text-sm text-[#D7B86A]">★ {product.rating}</td><td className="px-5 py-4"><Stock stock={product.stock} /></td><td className="px-5 py-4 text-right"><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0] hover:text-white">Edit</Link></td></tr>;
 }
 
 function ProductCard({ product }) {
-  return <article className="rounded-2xl border border-[#292929] bg-[#101010] p-4"><div className="flex items-center gap-4"><img src={product.thumbnail} alt="" className="h-16 w-16 rounded-xl object-cover" /><div className="min-w-0"><h3 className="truncate font-medium text-[#F2F2F2]">{product.title}</h3><p className="mt-1 text-sm capitalize text-[#888888]">{product.category}</p></div></div><div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#292929] pt-4"><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Price</p><p className="mt-1 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Rating</p><p className="mt-1 text-sm text-[#D7B86A]">★ {product.rating}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Stock</p><div className="mt-1"><Stock stock={product.stock} /></div></div></div></article>;
+  return <article className="rounded-2xl border border-[#292929] bg-[#101010] p-4"><div className="flex items-center justify-between gap-4"><Link href={`/products/${product.id}`} className="flex min-w-0 items-center gap-4"><ProductImage src={product.thumbnail} size="large" /><div className="min-w-0"><h3 className="truncate font-medium text-[#F2F2F2]">{product.title}</h3><p className="mt-1 text-sm capitalize text-[#888888]">{product.category}</p></div></Link><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0]">Edit</Link></div><div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#292929] pt-4"><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Price</p><p className="mt-1 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Rating</p><p className="mt-1 text-sm text-[#D7B86A]">★ {product.rating}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Stock</p><div className="mt-1"><Stock stock={product.stock} /></div></div></div></article>;
+}
+
+function ProductImage({ src, size }) {
+  const className = size === "large" ? "h-16 w-16" : "h-11 w-11";
+  return src ? <img src={src} alt="" className={`${className} rounded-xl object-cover`} /> : <span className={`${className} flex shrink-0 items-center justify-center rounded-xl bg-[#292929] text-[10px] uppercase tracking-wider text-[#777777]`}>No image</span>;
 }
 
 function Stock({ stock }) {
@@ -151,4 +218,27 @@ function getVisiblePages(currentPage, totalPages) {
   const visibleCount = Math.min(5, totalPages);
   const start = Math.max(1, Math.min(currentPage - 2, totalPages - visibleCount + 1));
   return Array.from({ length: visibleCount }, (_, index) => start + index);
+}
+
+function getLocalProducts() {
+  try {
+    return JSON.parse(localStorage.getItem("pad_local_products") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function matchesProduct(product, query, category) {
+  const searchable = `${product.title} ${product.description || ""} ${product.brand || ""}`.toLowerCase();
+  return (!query || searchable.includes(query.toLowerCase())) && (!category || product.category === category);
+}
+
+function sortProducts(products, sortBy, order) {
+  if (!sortBy) return products;
+  return [...products].sort((first, second) => {
+    const firstValue = first[sortBy];
+    const secondValue = second[sortBy];
+    const comparison = typeof firstValue === "string" ? firstValue.localeCompare(secondValue) : Number(firstValue) - Number(secondValue);
+    return order === "desc" ? -comparison : comparison;
+  });
 }

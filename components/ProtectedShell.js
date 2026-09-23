@@ -49,6 +49,9 @@ export default function ProtectedShell({ children }) {
 					<Link href="/products" className={`border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
 						Dashboard
 					</Link>
+					<Link href="/products/add" className={`border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products/add" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
+						Add product
+					</Link>
 				</div>
 			</nav>
 			<main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">{children}</main>
