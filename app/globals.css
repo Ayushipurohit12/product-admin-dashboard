@@ -8,9 +8,19 @@ html {
   scroll-behavior: smooth;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   background-color: #F7F5F0;
   color: #1C2321;
+}
+
+img {
+  display: block;
+  max-width: 100%;
 }
 
 :focus-visible {

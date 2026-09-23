@@ -22,7 +22,7 @@ export default function ProtectedShell({ children }) {
 	return (
 		<div className="min-h-screen bg-[#F7F5F0] text-[#1C2321]">
 			<header className="border-b border-[#E5E0D5] bg-[#1C2321] text-white">
-				<div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
+				<div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-8">
 					<Link href="/products" className="flex items-center gap-3">
 						<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#DDEAE2] text-lg font-bold text-[#1C2321]">S</span>
 						<span>
@@ -30,12 +30,12 @@ export default function ProtectedShell({ children }) {
 							<span className="block text-sm font-semibold">Admin Console</span>
 						</span>
 					</Link>
-					<div className="flex items-center gap-3 sm:gap-5">
+					<div className="flex items-center justify-between gap-3 sm:gap-5">
 						<div className="hidden text-right sm:block">
 							<p className="text-sm font-medium">{user.firstName || user.username}</p>
 							<p className="text-xs text-[#B9CEC1]">Catalog manager</p>
 						</div>
-						<span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7EC6A7] font-semibold text-[#1C2321]">
+						<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#7EC6A7] font-semibold text-[#1C2321]">
 							{(user.firstName || user.username || "U").slice(0, 1).toUpperCase()}
 						</span>
 						<button onClick={logout} className="rounded-xl border border-white/20 px-3 py-2 text-sm font-medium text-[#E5EEE9] transition hover:bg-white/10">
@@ -45,16 +45,16 @@ export default function ProtectedShell({ children }) {
 				</div>
 			</header>
 			<nav className="border-b border-[#E5E0D5] bg-white">
-				<div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 sm:px-8">
-					<Link href="/products" className={`border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
+				<div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 sm:px-8">
+					<Link href="/products" className={`shrink-0 border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
 						Dashboard
 					</Link>
-					<Link href="/products/add" className={`border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products/add" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
+					<Link href="/products/add" className={`shrink-0 border-b-2 px-1 py-4 text-sm font-semibold ${pathname === "/products/add" ? "border-[#2F5D50] text-[#2F5D50]" : "border-transparent text-[#6A756F] hover:text-[#1C2321]"}`}>
 						Add product
 					</Link>
 				</div>
 			</nav>
-			<main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:py-10">{children}</main>
+			<main className="mx-auto max-w-7xl px-4 py-6 sm:px-8 lg:py-10">{children}</main>
 		</div>
 	);
 }

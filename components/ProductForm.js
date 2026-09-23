@@ -46,7 +46,7 @@ export default function ProductForm({ initialProduct, mode = "add", onSave, savi
 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
-			<div className="grid gap-5 sm:grid-cols-2">
+			<div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
 				<Field label="Product title" name="title" value={form.title} onChange={updateField} required />
 				<Field label="Category" name="category" value={form.category} onChange={updateField} placeholder="e.g. smartphones" />
 				<Field label="Price" name="price" type="number" min="0.01" step="0.01" value={form.price} onChange={updateField} required />
@@ -56,7 +56,7 @@ export default function ProductForm({ initialProduct, mode = "add", onSave, savi
 			</div>
 			<div><label htmlFor="description" className="mb-2 block text-sm font-semibold">Description</label><textarea id="description" name="description" rows="5" value={form.description} onChange={updateField} className="w-full rounded-xl border border-[#D8D1C4] px-4 py-3" /></div>
 			{error ? <p role="alert" className="text-sm text-[#A24C3B]">{error}</p> : null}
-			<button type="submit" disabled={saving} className="rounded-xl bg-[#1C2321] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : mode === "edit" ? "Save changes" : "Create product"}</button>
+			<button type="submit" disabled={saving} className="w-full rounded-xl bg-[#1C2321] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{saving ? "Saving..." : mode === "edit" ? "Save changes" : "Create product"}</button>
 		</form>
 	);
 }
