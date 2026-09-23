@@ -9,27 +9,59 @@ export default function ProductsPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
+    const query = search.trim();
+    const timer = setTimeout(() => {
+      const path = query ? "/products/search" : "/products";
 
-    api.get("/products", { params: { limit: 0 } })
-      .then(({ data }) => {
-        if (!active) return;
-        setProducts(data.products || []);
-        setTotal(data.total || data.products?.length || 0);
+      api.get(path, {
+        params: {
+          limit: pageSize,
+          skip: (page - 1) * pageSize,
+          ...(query ? { q: query } : {}),
+        },
       })
-      .catch((requestError) => {
-        if (active) setError(requestError.message || "Could not load products.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+        .then(({ data }) => {
+          if (!active) return;
+          setProducts(data.products || []);
+          setTotal(data.total || data.products?.length || 0);
+          setError("");
+        })
+        .catch((requestError) => {
+          if (active) setError(requestError.message || "Could not load products.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 400);
 
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [page, pageSize, search]);
+
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, total);
+
+  function goToPage(nextPage) {
+    setPage(nextPage);
+    setLoading(true);
+  }
+
+  function changePageSize(event) {
+    setPageSize(Number(event.target.value));
+    setPage(1);
+    setLoading(true);
+  }
 
   return (
     <ProtectedShell>
@@ -53,7 +85,11 @@ export default function ProductsPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#777777]">Catalog</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">Product list</h2>
             </div>
-            <span className="text-sm text-[#777777]">{total} products</span>
+            <div className="flex items-center gap-3">
+              <label htmlFor="product-search" className="sr-only">Search products</label>
+              <input id="product-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); setLoading(true); }} placeholder="Search products..." className="w-48 rounded-xl border border-[#333333] bg-[#101010] px-3 py-2 text-sm text-white outline-none placeholder:text-[#777777] focus:border-[#777777] sm:w-64" />
+              <span className="hidden text-sm text-[#777777] sm:inline">{total} products</span>
+            </div>
           </div>
 
           {loading ? <div className="flex min-h-64 items-center justify-center rounded-2xl border border-[#292929] bg-[#101010]"><Loader label="Loading products" /></div> : null}
@@ -78,6 +114,21 @@ export default function ProductsPage() {
           {!loading && !error ? <div className="grid gap-3 md:hidden">
             {products.map((product) => <ProductCard key={product.id} product={product} />)}
           </div> : null}
+
+          {!error ? <div className="mt-8 flex flex-col items-center gap-4 text-sm text-[#999999]">
+            <p>Showing {firstItem}–{lastItem} of {total}</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <div className="flex overflow-hidden rounded-2xl border border-[#333333] bg-[#101010]">
+                <button type="button" aria-label="Previous page" disabled={page === 1 || loading} onClick={() => goToPage(page - 1)} className="flex h-12 w-12 items-center justify-center border-r border-[#333333] text-2xl text-[#D0D0D0] transition hover:bg-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-40">‹</button>
+                {getVisiblePages(page, pageCount).map((pageNumber) => <button key={pageNumber} type="button" disabled={loading} onClick={() => goToPage(pageNumber)} className={`h-12 min-w-12 border-r border-[#333333] px-3 text-base transition ${pageNumber === page ? "bg-white text-black" : "text-[#D0D0D0] hover:bg-[#1A1A1A]"}`}>{pageNumber}</button>)}
+                <button type="button" aria-label="Next page" disabled={page === pageCount || loading} onClick={() => goToPage(page + 1)} className="flex h-12 w-12 items-center justify-center text-2xl text-[#D0D0D0] transition hover:bg-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-40">›</button>
+              </div>
+              <label htmlFor="page-size" className="sr-only">Products per page</label>
+              <select id="page-size" value={pageSize} onChange={changePageSize} className="h-12 rounded-xl border border-[#333333] bg-[#101010] px-3 text-sm text-white outline-none focus:border-[#777777]">
+                {[10, 20, 50].map((size) => <option key={size} value={size}>{size} / page</option>)}
+              </select>
+            </div>
+          </div> : null}
         </div>
       </div>
     </ProtectedShell>
@@ -94,4 +145,10 @@ function ProductCard({ product }) {
 
 function Stock({ stock }) {
   return <span className={stock < 15 ? "text-sm text-[#E99B83]" : "text-sm text-[#A9D7B1]"}>{stock} units</span>;
+}
+
+function getVisiblePages(currentPage, totalPages) {
+  const visibleCount = Math.min(5, totalPages);
+  const start = Math.max(1, Math.min(currentPage - 2, totalPages - visibleCount + 1));
+  return Array.from({ length: visibleCount }, (_, index) => start + index);
 }
