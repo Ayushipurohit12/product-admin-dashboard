@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stockroom Product Admin Dashboard
 
-## Getting Started
+A responsive product administration dashboard built with Next.js, React, Tailwind CSS, and Axios on top of the DummyJSON API.
 
-First, run the development server:
+## Setup
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` and sign in with:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Username: `emilys`
+- Password: `emilyspass`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Useful checks:
 
-## Learn More
+```bash
+npm run lint
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Completed
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Login with protected product routes, token injection, session expiry handling, and logout.
+- Responsive product table/cards with image, category, price, rating, stock, pagination, page size, loading, empty, error, and retry states.
+- Debounced search, category filtering, sorting, and URL state for search, category, sort, order, page, and page size.
+- Product details with image gallery and reviews.
+- Validated add/edit forms, confirmation dialogs, and delete actions.
+- Stale product requests are cancelled so older search results cannot replace newer ones.
+- Invalid page values are normalized after the API response reports the available total.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Implementation Notes
 
-## Deploy on Vercel
+DummyJSON does not provide a combined search-and-category endpoint. To keep the API behavior predictable, choosing a category clears the search value; search and category are therefore mutually exclusive in the UI and URL.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+DummyJSON add, update, and delete endpoints simulate mutations without permanently changing the server dataset. New products and edited products are stored in `localStorage` under `pad_local_products`, and local overrides are merged into the dashboard. This makes changes visible in the app after navigation and refresh on the same browser.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Axios is configured once in `lib/axios.js`. Its request interceptor adds the stored bearer token, while its response interceptor normalizes errors and redirects expired sessions to login.
+
+## AI Note
+
+I used AI mainly for suggestions, debugging, and identifying edge cases. I understood and reviewed the code myself, made the final changes, and validated everything with the project requirements and build checks.

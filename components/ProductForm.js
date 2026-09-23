@@ -27,6 +27,7 @@ export default function ProductForm({ initialProduct, mode = "add", onSave, savi
 
 	async function handleSubmit(event) {
 		event.preventDefault();
+		if (saving) return;
 		if (!form.title.trim()) {
 			setError("Product title is required.");
 			return;

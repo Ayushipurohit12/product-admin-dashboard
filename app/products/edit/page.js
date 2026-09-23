@@ -42,15 +42,19 @@ export default function EditProductPage() {
   }, []);
 
   async function handleSave(fields) {
+    if (saving) return;
     setSaving(true);
     setError("");
     try {
-      if (product._local) {
+      if (product._local || product._localEdit) {
         const products = getLocalProducts().map((item) => String(item.id) === String(id) ? { ...item, ...fields } : item);
         localStorage.setItem("pad_local_products", JSON.stringify(products));
         setProduct((current) => ({ ...current, ...fields }));
       } else {
-        await updateProduct(id, fields);
+        const updated = await updateProduct(id, fields);
+        const products = getLocalProducts().filter((item) => String(item.id) !== String(id));
+        localStorage.setItem("pad_local_products", JSON.stringify([{ ...updated, ...fields, _localEdit: true }, ...products]));
+        setProduct((current) => ({ ...current, ...updated, ...fields }));
       }
       setSaved(true);
     } catch (requestError) {

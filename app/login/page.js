@@ -20,6 +20,7 @@ export default function LoginPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (submitting) return;
     setError("");
     setSubmitting(true);
     try {

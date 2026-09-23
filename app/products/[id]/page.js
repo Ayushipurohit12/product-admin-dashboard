@@ -5,8 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import ProtectedShell from "@/components/ProtectedShell";
 import Loader from "@/components/Loader";
-import api from "@/lib/axios";
-import { deleteProduct } from "@/lib/products";
+import { deleteProduct, getProduct } from "@/lib/products";
 
 export default function ProductDetailsPage() {
   const { id } = useParams();
@@ -48,8 +47,8 @@ export default function ProductDetailsPage() {
       return () => { active = false; };
     }
 
-    api.get(`/products/${id}`)
-      .then(({ data }) => {
+    getProduct(id)
+      .then((data) => {
         if (active) setProduct(data);
       })
       .catch(() => {

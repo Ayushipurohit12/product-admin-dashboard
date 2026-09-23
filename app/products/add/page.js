@@ -13,6 +13,7 @@ export default function AddProductPage() {
   const [createdId, setCreatedId] = useState(null);
 
   async function handleSave(product) {
+    if (saving) return;
     setSaving(true);
     setError("");
     try {

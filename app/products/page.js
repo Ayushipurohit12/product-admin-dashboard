@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import Link from "next/link";
 import ProtectedShell from "@/components/ProtectedShell";
 import Loader from "@/components/Loader";
-import api from "@/lib/axios";
+import { deleteProduct, getCategories, getProducts } from "@/lib/products";
 
 export default function ProductsPage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -20,44 +20,72 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  function updateUrl(changes) {
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value === "" || value === null || value === undefined || (key === "page" && value === 1) || (key === "pageSize" && value === 10)) params.delete(key);
+      else params.set(key, String(value));
+    });
+    const queryString = params.toString();
+    window.history.replaceState(null, "", queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname);
+  }
 
   useEffect(() => {
-    api.get("/products/categories")
-      .then(({ data }) => setCategories(data.map((item) => typeof item === "string" ? { slug: item, name: item } : item)))
+    getCategories()
+      .then((data) => setCategories(data.map((item) => typeof item === "string" ? { slug: item, name: item } : item)))
       .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedPageSize = Number(params.get("pageSize"));
+    startTransition(() => {
+      setSearch(params.get("search") || "");
+      setCategory(params.get("category") || "");
+      setSortBy(params.get("sortBy") || "");
+      setOrder(params.get("order") === "desc" ? "desc" : "asc");
+      setPage(Math.max(1, Number(params.get("page")) || 1));
+      setPageSize([10, 20, 50].includes(requestedPageSize) ? requestedPageSize : 10);
+      setHydrated(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return undefined;
     let active = true;
+    const controller = new AbortController();
     const query = search.trim();
     const timer = setTimeout(() => {
-      const path = query
-        ? "/products/search"
-        : category
-          ? `/products/category/${encodeURIComponent(category)}`
-          : "/products";
-
-      api.get(path, {
-        params: {
-          limit: pageSize,
-          skip: (page - 1) * pageSize,
-          ...(query ? { q: query } : {}),
-          ...(sortBy ? { sortBy, order } : {}),
-        },
-      })
-        .then(({ data }) => {
+      getProducts({ query, category, limit: pageSize, skip: (page - 1) * pageSize, sortBy, order, signal: controller.signal })
+        .then((data) => {
           if (!active) return;
           const localProducts = getLocalProducts().filter((product) => matchesProduct(product, query, category));
-          const sortedLocalProducts = sortProducts(localProducts, sortBy, order);
+          const localIds = new Set(localProducts.map((product) => String(product.id)));
+          const remoteProducts = (data.products || []).map((product) => localIds.has(String(product.id))
+            ? localProducts.find((localProduct) => String(localProduct.id) === String(product.id))
+            : product).filter(Boolean);
+          const localAdds = localProducts.filter((product) => !product._localEdit);
           const pageProducts = page === 1
-            ? [...sortedLocalProducts, ...(data.products || [])].slice(0, pageSize)
-            : data.products || [];
+            ? [...sortProducts(localAdds, sortBy, order), ...remoteProducts].slice(0, pageSize)
+            : remoteProducts;
+          const nextTotal = (data.total || data.products?.length || 0) + localAdds.length;
+          const nextPageCount = Math.max(1, Math.ceil(nextTotal / pageSize));
+          if (page > nextPageCount) {
+            setPage(nextPageCount);
+            updateUrl({ page: nextPageCount });
+            return;
+          }
           setProducts(pageProducts);
-          setTotal((data.total || data.products?.length || 0) + sortedLocalProducts.length);
+          setTotal(nextTotal);
           setError("");
         })
         .catch((requestError) => {
-          if (active) setError(requestError.message || "Could not load products.");
+          if (active && !requestError.cancelled) setError(requestError.message || "Could not load products.");
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -67,8 +95,9 @@ export default function ProductsPage() {
     return () => {
       active = false;
       clearTimeout(timer);
+      controller.abort();
     };
-  }, [page, pageSize, search, category, sortBy, order, retryKey]);
+  }, [page, pageSize, search, category, sortBy, order, retryKey, hydrated]);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const firstItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -76,18 +105,23 @@ export default function ProductsPage() {
 
   function goToPage(nextPage) {
     setPage(nextPage);
+    updateUrl({ page: nextPage });
     setLoading(true);
   }
 
   function changePageSize(event) {
     setPageSize(Number(event.target.value));
     setPage(1);
+    updateUrl({ pageSize: Number(event.target.value), page: 1 });
     setLoading(true);
   }
 
   function changeCategory(event) {
-    setCategory(event.target.value);
+    const nextCategory = event.target.value;
+    setCategory(nextCategory);
+    setSearch("");
     setPage(1);
+    updateUrl({ category: nextCategory, search: "", page: 1 });
     setLoading(true);
   }
 
@@ -96,6 +130,7 @@ export default function ProductsPage() {
     setSortBy(nextSortBy);
     setOrder(nextOrder || "asc");
     setPage(1);
+    updateUrl({ sortBy: nextSortBy, order: nextOrder || "asc", page: 1 });
     setLoading(true);
   }
 
@@ -103,6 +138,34 @@ export default function ProductsPage() {
     setError("");
     setLoading(true);
     setRetryKey((current) => current + 1);
+  }
+
+  function changeSearch(value) {
+    setSearch(value);
+    setPage(1);
+    updateUrl({ search: value, page: 1 });
+    setLoading(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      if (deleteTarget._local || deleteTarget._localEdit) {
+        const localProducts = getLocalProducts().filter((item) => String(item.id) !== String(deleteTarget.id));
+        localStorage.setItem("pad_local_products", JSON.stringify(localProducts));
+      } else {
+        await deleteProduct(deleteTarget.id);
+      }
+      setProducts((current) => current.filter((product) => product.id !== deleteTarget.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setDeleteTarget(null);
+    } catch (requestError) {
+      setDeleteError(requestError.message || "Could not delete this product.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -129,7 +192,7 @@ export default function ProductsPage() {
             </div>
             <div className="flex items-center gap-3">
               <label htmlFor="product-search" className="sr-only">Search products</label>
-              <input id="product-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); setLoading(true); }} placeholder="Search products..." className="w-48 rounded-xl border border-[#333333] bg-[#101010] px-3 py-2 text-sm text-white outline-none placeholder:text-[#777777] focus:border-[#777777] sm:w-64" />
+              <input id="product-search" type="search" value={search} onChange={(event) => changeSearch(event.target.value)} placeholder="Search products..." className="w-48 rounded-xl border border-[#333333] bg-[#101010] px-3 py-2 text-sm text-white outline-none placeholder:text-[#777777] focus:border-[#777777] sm:w-64" />
               <span className="hidden text-sm text-[#777777] sm:inline">{total} products</span>
             </div>
           </div>
@@ -168,13 +231,13 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#292929]">
-                {products.map((product) => <ProductRow key={product.id} product={product} />)}
+                {products.map((product) => <ProductRow key={product.id} product={product} onDelete={() => { setDeleteError(""); setDeleteTarget(product); }} />)}
               </tbody>
             </table>
           </div> : null}
 
           {!loading && !error && products.length > 0 ? <div className="grid gap-3 md:hidden">
-            {products.map((product) => <ProductCard key={product.id} product={product} />)}
+            {products.map((product) => <ProductCard key={product.id} product={product} onDelete={() => { setDeleteError(""); setDeleteTarget(product); }} />)}
           </div> : null}
 
           {!error ? <div className="mt-8 flex flex-col items-center gap-4 text-sm text-[#999999]">
@@ -192,22 +255,27 @@ export default function ProductsPage() {
             </div>
           </div> : null}
         </div>
+        {deleteTarget ? <DeleteDialog product={deleteTarget} deleting={deleting} error={deleteError} onCancel={() => setDeleteTarget(null)} onConfirm={confirmDelete} /> : null}
       </div>
     </ProtectedShell>
   );
 }
 
-function ProductRow({ product }) {
-  return <tr className="transition hover:bg-[#161616]"><td className="px-5 py-4"><Link href={`/products/${product.id}`} className="flex items-center gap-3"><ProductImage src={product.thumbnail} size="small" /><span className="font-medium text-[#F2F2F2] hover:text-white">{product.title}</span></Link></td><td className="px-5 py-4 text-sm capitalize text-[#999999]">{product.category}</td><td className="px-5 py-4 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</td><td className="px-5 py-4 text-sm text-[#D7B86A]">★ {product.rating}</td><td className="px-5 py-4"><Stock stock={product.stock} /></td><td className="px-5 py-4 text-right"><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0] hover:text-white">Edit</Link></td></tr>;
+function ProductRow({ product, onDelete }) {
+  return <tr className="transition hover:bg-[#161616]"><td className="px-5 py-4"><Link href={`/products/${product.id}`} className="flex items-center gap-3"><ProductImage src={product.thumbnail} size="small" /><span className="font-medium text-[#F2F2F2] hover:text-white">{product.title}</span></Link></td><td className="px-5 py-4 text-sm capitalize text-[#999999]">{product.category}</td><td className="px-5 py-4 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</td><td className="px-5 py-4 text-sm text-[#D7B86A]">★ {product.rating}</td><td className="px-5 py-4"><Stock stock={product.stock} /></td><td className="px-5 py-4 text-right"><div className="flex justify-end gap-3"><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0] hover:text-white">Edit</Link><button type="button" onClick={onDelete} className="text-sm font-semibold text-[#E99B83] hover:text-[#FFD3CC]">Delete</button></div></td></tr>;
 }
 
-function ProductCard({ product }) {
-  return <article className="rounded-2xl border border-[#292929] bg-[#101010] p-4"><div className="flex items-center justify-between gap-4"><Link href={`/products/${product.id}`} className="flex min-w-0 items-center gap-4"><ProductImage src={product.thumbnail} size="large" /><div className="min-w-0"><h3 className="truncate font-medium text-[#F2F2F2]">{product.title}</h3><p className="mt-1 text-sm capitalize text-[#888888]">{product.category}</p></div></Link><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0]">Edit</Link></div><div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#292929] pt-4"><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Price</p><p className="mt-1 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Rating</p><p className="mt-1 text-sm text-[#D7B86A]">★ {product.rating}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Stock</p><div className="mt-1"><Stock stock={product.stock} /></div></div></div></article>;
+function ProductCard({ product, onDelete }) {
+  return <article className="rounded-2xl border border-[#292929] bg-[#101010] p-4"><div className="flex items-center justify-between gap-4"><Link href={`/products/${product.id}`} className="flex min-w-0 items-center gap-4"><ProductImage src={product.thumbnail} size="large" /><div className="min-w-0"><h3 className="truncate font-medium text-[#F2F2F2]">{product.title}</h3><p className="mt-1 text-sm capitalize text-[#888888]">{product.category}</p></div></Link><div className="flex gap-3"><Link href={`/products/edit?id=${product.id}`} className="text-sm font-semibold text-[#9CC9B0]">Edit</Link><button type="button" onClick={onDelete} className="text-sm font-semibold text-[#E99B83]">Delete</button></div></div><div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#292929] pt-4"><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Price</p><p className="mt-1 text-sm font-medium text-[#E6E6E6]">${Number(product.price).toFixed(2)}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Rating</p><p className="mt-1 text-sm text-[#D7B86A]">★ {product.rating}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[#777777]">Stock</p><div className="mt-1"><Stock stock={product.stock} /></div></div></div></article>;
 }
 
 function ProductImage({ src, size }) {
   const className = size === "large" ? "h-16 w-16" : "h-11 w-11";
   return src ? <img src={src} alt="" className={`${className} rounded-xl object-cover`} /> : <span className={`${className} flex shrink-0 items-center justify-center rounded-xl bg-[#292929] text-[10px] uppercase tracking-wider text-[#777777]`}>No image</span>;
+}
+
+function DeleteDialog({ product, deleting, error, onCancel, onConfirm }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5"><div role="dialog" aria-modal="true" aria-labelledby="list-delete-title" className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><h2 id="list-delete-title" className="text-xl font-semibold text-[#1C2321]">Delete product?</h2><p className="mt-3 text-sm leading-6 text-[#65716C]">Delete <strong>{product.title}</strong> from the catalog?</p>{error ? <p role="alert" className="mt-4 rounded-xl bg-[#FFF1EE] px-3 py-2 text-sm text-[#A24C3B]">{error}</p> : null}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={deleting} onClick={onCancel} className="rounded-xl border border-[#D8D1C4] px-4 py-2.5 text-sm font-semibold text-[#33403C]">Cancel</button><button type="button" disabled={deleting} onClick={onConfirm} className="rounded-xl bg-[#A24C3B] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{deleting ? "Deleting..." : "Delete product"}</button></div></div></div>;
 }
 
 function Stock({ stock }) {
